@@ -19,6 +19,9 @@ struct ArbitrageParams {
     uint256 amountIn;
     uint256 minProfit;
 
+    uint256 minAmountOutBuy;   // per-leg slippage floor for the buy swap
+    uint256 minAmountOutSell;  // per-leg slippage floor for the sell swap
+
     bytes buyData;
     bytes sellData;
 }

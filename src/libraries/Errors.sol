@@ -15,4 +15,9 @@ library Errors {
     error InvalidRoute();
     error DeadlineExpired();
     error SlippageExceeded();
+    error ContractPaused();
+    error NoPendingExecutorChange();
+    error TimelockNotElapsed();
+    error NoPendingOwnershipTransfer();
+    error NotPendingOwner();
 }
