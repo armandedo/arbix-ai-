@@ -128,6 +128,12 @@ contract ArbixFlashLoan is
             revert Errors.InvalidAmount();
         }
 
+        emit FlashLoanCompleted(
+            asset,
+            amount,
+            premium
+        );
+
         if (!IERC20(asset).transfer(address(executor), amount)) {
             revert Errors.FlashLoanFailed();
         }
@@ -144,12 +150,6 @@ contract ArbixFlashLoan is
         ) {
             revert Errors.FlashLoanFailed();
         }
-
-        emit FlashLoanCompleted(
-            asset,
-            amount,
-            premium
-        );
 
         return true;
     }
@@ -173,15 +173,15 @@ contract ArbixFlashLoan is
             revert Errors.InsufficientBalance();
         }
 
+        emit ProfitWithdrawn(asset, to, amount);
+
         if (!IERC20(asset).transfer(to, amount)) {
             revert Errors.FlashLoanFailed();
         }
-
-        emit ProfitWithdrawn(asset, to, amount);
     }
 
     /// @notice Pauses or unpauses new flash-loan requests.
-    /// @dev Does not affect withdrawProfit — the owner can always retrieve
+    /// @dev Does not affect withdrawProfit — the ownercan always retrieve
     ///      funds, paused or not.
     function setPaused(bool value) external onlyOwner {
         paused = value;
@@ -191,7 +191,7 @@ contract ArbixFlashLoan is
     /// @notice Proposes a new executor. Takes effect only after
     ///         EXECUTOR_CHANGE_DELAY has elapsed and executeExecutorChange()
     ///         is called.
-    function proposeExecutorChange(address newExecutor) external onlyOwner {
+    function proposeExecutorChange(address newExecutor)external onlyOwner {
         if (newExecutor == address(0)) {
             revert Errors.ZeroAddress();
         }
@@ -204,11 +204,11 @@ contract ArbixFlashLoan is
 
     /// @notice Finalizes a previously proposed executor change, once the
     ///         timelock has elapsed.
-    function executeExecutorChange() external onlyOwner {
+    function executeExecutorChange() external onlyOwner{
         if (pendingExecutor == address(0)) {
             revert Errors.NoPendingExecutorChange();
         }
-        if (block.timestamp < executorChangeUnlockTime) {
+        if (block.timestamp < executorChangeUnlockTime){
             revert Errors.TimelockNotElapsed();
         }
 
@@ -234,4 +234,3 @@ contract ArbixFlashLoan is
         emit ExecutorChangeCancelled(cancelled);
     }
 }
-
