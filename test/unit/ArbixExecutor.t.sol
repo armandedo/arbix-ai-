@@ -157,4 +157,103 @@ contract ArbixExecutorTest is Test {
         vm.expectRevert(Errors.Unauthorized.selector);
         attacker.attack(params);
     }
+
+    // ---------------------------------------------------------------
+    // Fuzzing: profit math
+    // ---------------------------------------------------------------
+
+    /// @dev Independently recomputes the two-leg swap math using the same
+    ///      floor-division formula as MockDexAdapter, then asserts the
+    ///      executor's outcome (revert vs. exact swept amount) matches it
+    ///      across randomized amounts and rates.
+    function testFuzz_ExecuteArbitrage_ProfitMatchesCalculatedDelta(
+        uint96 amountInRaw,
+        uint32 buyNum,
+        uint32 buyDenom,
+        uint32 sellNum,
+        uint32 sellDenom
+    ) public {
+        uint256 amountIn = bound(uint256(amountInRaw), 1, 1e24);
+        buyDenom = uint32(bound(uint256(buyDenom), 1, 1e6));
+        sellDenom = uint32(bound(uint256(sellDenom), 1, 1e6));
+        buyNum = uint32(bound(uint256(buyNum), 1, 1e6));
+        sellNum = uint32(bound(uint256(sellNum), 1, 1e6));
+
+        buyAdapter.setRate(buyNum, buyDenom);
+        sellAdapter.setRate(sellNum, sellDenom);
+
+        tokenA.mint(address(executor), amountIn);
+
+        uint256 tokenOutReceived = (amountIn * buyNum) / buyDenom;
+        uint256 tokenInReceived = (tokenOutReceived * sellNum) / sellDenom;
+
+        ArbitrageParams memory params = ArbitrageParams({
+            tokenIn: address(tokenA),
+            tokenOut: address(tokenB),
+            dexBuy: address(buyAdapter),
+            dexSell: address(sellAdapter),
+            amountIn: amountIn,
+            minProfit: 0,
+            minAmountOutBuy: 0,
+            minAmountOutSell: 0,
+            buyData: "",
+            sellData: ""
+        });
+
+        if (tokenInReceived <= amountIn) {
+            // Break-even or losing trade: must always revert, never
+            // silently sweep a non-positive "profit" back to the caller.
+            vm.expectRevert(Errors.NoProfit.selector);
+            executor.executeArbitrage(params);
+            return;
+        }
+
+        uint256 expectedProfit = tokenInReceived - amountIn;
+
+        executor.executeArbitrage(params);
+
+        assertEq(tokenA.balanceOf(address(this)), amountIn + expectedProfit);
+        assertEq(tokenA.balanceOf(address(executor)), 0);
+        assertEq(tokenB.balanceOf(address(executor)), 0);
+    }
+
+    /// @dev Constructs a guaranteed-profitable trade, then sets minProfit
+    ///      strictly above the true profit to confirm the minimum-profit
+    ///      gate can't be bypassed by rounding or edge-case rates.
+    function testFuzz_ExecuteArbitrage_RevertsWhenProfitBelowRequestedMinimum(
+        uint96 amountInRaw,
+        uint32 sellNumRaw,
+        uint32 sellDenomRaw,
+        uint256 minProfitRaw
+    ) public {
+        uint256 amountIn = bound(uint256(amountInRaw), 1e6, 1e24);
+        uint256 sellDenom = bound(uint256(sellDenomRaw), 1, 1e6);
+        // Bias sellNum strictly above sellDenom so the trade is profitable
+        // in isolation before we force minProfit above that true profit.
+        uint256 sellNum = bound(uint256(sellNumRaw), sellDenom + 1, sellDenom * 2);
+
+        buyAdapter.setRate(1, 1);
+        sellAdapter.setRate(sellNum, sellDenom);
+
+        tokenA.mint(address(executor), amountIn);
+
+        uint256 actualProfit = (amountIn * sellNum) / sellDenom - amountIn;
+        uint256 minProfit = bound(minProfitRaw, actualProfit + 1, actualProfit + 1e24);
+
+        ArbitrageParams memory params = ArbitrageParams({
+            tokenIn: address(tokenA),
+            tokenOut: address(tokenB),
+            dexBuy: address(buyAdapter),
+            dexSell: address(sellAdapter),
+            amountIn: amountIn,
+            minProfit: minProfit,
+            minAmountOutBuy: 0,
+            minAmountOutSell: 0,
+            buyData: "",
+            sellData: ""
+        });
+
+        vm.expectRevert(Errors.NoProfit.selector);
+        executor.executeArbitrage(params);
+    }
 }
