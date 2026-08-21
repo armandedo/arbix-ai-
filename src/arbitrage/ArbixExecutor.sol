@@ -90,13 +90,17 @@ contract ArbixExecutor is IArbitrageExecutor {
             revert Errors.SwapFailed();
         }
 
-        IDexAdapter(params.dexSell).swap(
+        uint256 tokenInReceived = IDexAdapter(params.dexSell).swap(
             params.tokenOut,
             params.tokenIn,
             tokenOutReceived,
             params.minAmountOutSell,
             params.sellData
         );
+
+        if (tokenInReceived < params.minAmountOutSell) {
+            revert Errors.SwapFailed();
+        }
 
         uint256 balanceAfter = tokenIn.balanceOf(address(this));
 
