@@ -134,11 +134,15 @@ contract ArbixFlashLoan is
             premium
         );
 
-        if (!IERC20(asset).transfer(address(executor), amount)) {
+        // Cache executor in memory: avoids a second SLOAD for the
+        // executeArbitrage call below (was read from storage twice).
+        IArbitrageExecutor exec = executor;
+
+        if (!IERC20(asset).transfer(address(exec), amount)) {
             revert Errors.FlashLoanFailed();
         }
 
-        executor.executeArbitrage(arbParams);
+        exec.executeArbitrage(arbParams);
 
         uint256 repayment = amount + premium;
 
@@ -205,7 +209,12 @@ contract ArbixFlashLoan is
     /// @notice Finalizes a previously proposed executor change, once the
     ///         timelock has elapsed.
     function executeExecutorChange() external onlyOwner{
-        if (pendingExecutor == address(0)) {
+        // Cache pendingExecutor in memory: reused below for both the
+        // assignment and the event, instead of re-reading storage
+        // (address(executor)) after the write.
+        address newExecutor = pendingExecutor;
+
+        if (newExecutor == address(0)) {
             revert Errors.NoPendingExecutorChange();
         }
         if (block.timestamp < executorChangeUnlockTime){
@@ -213,12 +222,12 @@ contract ArbixFlashLoan is
         }
 
         address oldExecutor = address(executor);
-        executor = IArbitrageExecutor(pendingExecutor);
+        executor = IArbitrageExecutor(newExecutor);
 
         pendingExecutor = address(0);
         executorChangeUnlockTime = 0;
 
-        emit ExecutorChangeExecuted(oldExecutor, address(executor));
+        emit ExecutorChangeExecuted(oldExecutor, newExecutor);
     }
 
     /// @notice Cancels a pending executor change before it takes effect.
