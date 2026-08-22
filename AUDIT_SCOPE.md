@@ -151,6 +151,19 @@ balance at rest."*
   router's return value instead and should not be used with FOT tokens).
   Do not route arbitrage through FOT tokens without auditing each adapter's
   specific handling first.
+  - **Non-standard `approve()` tokens (e.g. legacy USDT) are not explicitly
+  hardened against.** `ArbixExecutor` and both DEX adapters call
+  `approve()` with a fresh non-zero allowance each trade without first
+  resetting to zero. Some older tokens revert on a non-zero-to-non-zero
+  approval change. This is considered low-risk given (a) the executor
+  never holds a resting balance or stale allowance between transactions —
+  confirmed by the invariant tests in §5.2 — and (b) each approval is
+  fully consumed within the same atomic transaction it's created in. Not
+  hardened with an approve-to-zero-first pattern to avoid the added gas
+  cost on every trade. Flagged here as an explicit, accepted trade-off
+  rather than an oversight; auditors should confirm this reasoning holds
+  and flag if a specific token in the intended trading set requires the
+  defensive pattern.
 - **Off-chain trading/execution bot is not yet built.** This audit scope
   covers on-chain contracts only.
 - **Gas/MEV hardening not yet implemented** — no private mempool
@@ -176,3 +189,7 @@ balance at rest."*
 4. Confirm the accepted reentrancy reasoning in §4.2 for the stateless
    adapters — particularly whether any indirect exploitation path exists
    that doesn't require persistent adapter storage.
+5. Confirm whether any specific token planned for arbitrage requires the
+   approve-to-zero-first pattern (see §7) before it's added to the trading
+   set — this is a per-token compatibility check, not a general contract
+   flaw.
