@@ -22,3 +22,7 @@ docs/
 # Editor swap files
 *.swp
 *.swo
+bot/
+test-infra/
+broadcast/
+cache/
